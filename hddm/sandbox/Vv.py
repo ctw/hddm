@@ -26,8 +26,9 @@ class HDDMVv(HDDM):
         # reported fit values. 
         # See: Matzke & Wagenmakers 2009
         if self.Vv_exp:
-            Va_upper = 3
-            Vb_upper = 0.3
+            Va_upper = 5
+            Vb_upper = 0.5
+            Vb_lower = -100
         else:
             Va_upper = 2
             Vb_upper = 2
@@ -38,7 +39,7 @@ class HDDMVv(HDDM):
                             default=.5, optional=True),
                   Parameter('Va', lower=0, upper=Va_upper, init=0.1,
                             create_subj_nodes=self.Vv_per_subj),
-                  Parameter('Vb', lower=0, upper=Vb_upper, init=0.1,
+                  Parameter('Vb', lower=Vb_lower, upper=Vb_upper, init=0.1,
                             create_subj_nodes=self.Vv_per_subj),
                   Parameter('V', lower=0., upper=15, is_bottom_node = True),
                   Parameter('Z', lower=0., upper=1.0, init=.1,
