@@ -25,7 +25,7 @@ class HDDMVv(HDDM):
         # These boundaries are largely based on a meta-analysis of
         # reported fit values. 
         # See: Matzke & Wagenmakers 2009
-        if Vv_exp:
+        if self.Vv_exp:
             Va_upper = 3
             Vb_upper = 0.5
         else:
