@@ -40,7 +40,7 @@ class HDDMVv(HDDM):
                             create_subj_nodes=self.Vv_per_subj),
                   Parameter('Vb', lower=0, upper=Vb_upper, init=0.1,
                             create_subj_nodes=self.Vv_per_subj),
-                  Parameter('V', lower=0., upper=3.5, is_bottom_node = True),
+                  Parameter('V', lower=0., upper=15, is_bottom_node = True),
                   Parameter('Z', lower=0., upper=1.0, init=.1,
                             default=0, optional=True),
                   Parameter('T', lower=0., upper=0.8, init=.1, 
@@ -55,7 +55,12 @@ class HDDMVv(HDDM):
             Vb = params['Vb']
             v = params['v']
             if self.Vv_exp:
-                V_func = lambda Va=Va, Vb=Vb, v=v: Va*np.exp(abs(v)*Vb)
+                def V_func(Va=Va, Vb=Vb, v=v):
+                    s =  Va*np.exp(abs(v)*Vb)
+                    if s < param.upper:
+                        return param.upper
+                    else:
+                        return 
             else:
                 V_func = lambda Va=Va, Vb=Vb, v=v: Va*np.abs(v) + Vb
             return pm.Lambda(param.full_name, V_func, plot=self.plot_subjs,
