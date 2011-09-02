@@ -57,10 +57,10 @@ class HDDMVv(HDDM):
             if self.Vv_exp:
                 def V_func(Va=Va, Vb=Vb, v=v):
                     s =  Va*np.exp(abs(v)*Vb)
-                    if s < param.upper:
+                    if s > param.upper:
                         return param.upper
                     else:
-                        return 
+                        return s 
             else:
                 V_func = lambda Va=Va, Vb=Vb, v=v: Va*np.abs(v) + Vb
             return pm.Lambda(param.full_name, V_func, plot=self.plot_subjs,
