@@ -27,7 +27,7 @@ class HDDMVv(HDDM):
         # See: Matzke & Wagenmakers 2009
         if self.Vv_exp:
             Va_upper = 3
-            Vb_upper = 0.5
+            Vb_upper = 0.3
         else:
             Va_upper = 2
             Vb_upper = 2
