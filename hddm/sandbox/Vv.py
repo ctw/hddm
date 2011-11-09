@@ -241,7 +241,7 @@ class HDDMshift(HDDM):
     """
     def __init__(self, data, **kwargs):
         if 'debug' in kwargs:
-            self.debug = debug
+            self.debug = kwargs['debug']
             del kwargs['debug']
         else:
             self.debug= False
@@ -256,15 +256,12 @@ class HDDMshift(HDDM):
         # See: Matzke & Wagenmakers 2009
         params = [Parameter('a', lower=.3, upper=4),
                   Parameter('vbase', lower=-15., upper=15., init=0.),
-                  Parameter('vshift', lower = -15, upper=15., init=0.),
-                  Parameter('pre_z', lower=0., upper=1., init=0.5),
-                  Parameter('pBias', lower=0, upper=1., init=0.5, create_group_node = False),
-                  Parameter('BerBias', create_group_node = False),
+                  Parameter('vshift', lower = -15, upper=15., init=0.),               
+                  Parameter('z', init=.5,  default=.5, optional=True),
                   Parameter('t', lower=.1, upper=.9, init=.1), # Change lower to .2 as in MW09?
                   Parameter('V', lower=0., upper=3.5, default=0,
                             optional=True),
                   Parameter('v', is_bottom_node=True),
-                  Parameter('z', is_bottom_node=True),
                   Parameter('Z', lower=0., upper=1.0, init=.1,
                             default=0, optional=True),
                   Parameter('T', lower=0., upper=0.8, init=.1,
@@ -308,33 +305,9 @@ class HDDMshift(HDDM):
                              trace=self.trace_subjs,
                              value=param.init)
             
-        if param.name == 'pre_z':
-            if 'long' in param.tag:
-                return pm.TruncatedNormal(param.full_name,
-                                          a=param.lower,
-                                          b=param.upper,
-                                          mu=param.group, 
-                                          tau=param.var**-2,
-                                          plot=self.plot_subjs,
-                                          trace = self.trace_subjs,
-                                          value=param.init)
-            else:
-                return pm.TruncatedNormal(param.full_name,
-                                          a=param.lower,
-                                          b=param.upper,
-                                          mu=param.group, 
-                                          tau=param.var**-2,
-                                          plot=self.plot_subjs,
-                                          trace = self.trace_subjs,
-                                          value=0.0)
-        if param.name == 'BerBias':
-            return pm.Bernoulli(param.full_name, 
-                                self.params_dict['pBias'].subj_nodes[param.tag][param.idx],
-                                plot=False)
-        
-        if param.name == 'pBias':
-            return pm.Beta(param.full_name, alpha=1., 
-                           beta=1., value=param.init)
+        if param.name == 'z':
+            return pm.Beta(param.full_name, alpha=0.5*param.var, beta=0.5*param.var,
+                           plot=self.plot_subjs, trace=self.trace_subjs, value=param.init)
 
         else:
             return pm.TruncatedNormal(param.full_name,
@@ -358,13 +331,8 @@ class HDDMshift(HDDM):
         if param.name == 'vshift' and param.tag == str(self.depends_dict['vshift'][-1]):
             return None
 
-        if param.name == 'pre_z' and param.tag != 'long':
-            return pm.Uniform(param.full_name,
-                          lower=param.lower,
-                          upper=param.upper,
-                          value=0,
-                          verbose=param.verbose)
-        
+        if param.name == 'z':
+            return None        
 
         return pm.Uniform(param.full_name,
                           lower=param.lower,
@@ -389,25 +357,13 @@ class HDDMshift(HDDM):
         if param.name == 'vshift' and param.tag == ('var' + str(self.depends_dict['vshift'][-1])):
             return None
         
-        if param.name == 'BerBias' or param.name == 'pBias':
-            return None
-
+        if param.name == 'z':
+            return pm.Exponential(param.full_name, beta=100, value = 1.)
+        
         return pm.Uniform(param.full_name, lower=0., upper=10.,
                           value=.1, plot=self.plot_var)
  
     def get_bottom_node(self, param, params):
-        if param.name == 'z':
-            if 'long' in param.tag:
-                return pm.Lambda(param.full_name, lambda pre_z=params['pre_z']:pre_z,
-                                 plot=self.plot_subjs,trace=self.trace_subjs)
-            else:
-                long_tag = [x for x in self.params_dict['pre_z'].subj_nodes.keys() if 'long' in x]
-                assert len(long_tag)<=1, "too many tags fullfill the condition"
-                long_tag = long_tag[0]
-                base = self.params_dict['pre_z'].subj_nodes[long_tag][param.idx]
-                z_func = lambda base=base, shift=params['pre_z'], b=params['BerBias']: base + shift * (2*b-1)
-                return pm.Lambda(param.full_name, z_func, plot=self.plot_subjs,
-                             trace=self.trace_subjs)
 
         if param.name == 'v':
             v_func = lambda vbase=params['vbase'], vshift=params['vshift']: vbase + vshift
