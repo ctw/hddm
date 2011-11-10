@@ -64,6 +64,25 @@ def general_WienerFullIntrp_variable(err=1e-4, nT=2, nZ=2, use_adaptive=1, simps
                                        logp=_like,
                                        dtype=np.float,
                                        mv=False)
+
+def general_Wiener_variable_with_bias(A_idx, err, nT, nZ, use_adaptive, simps_err):
+    """
+    create a stochostic Wiener variable with a bias term (z) that
+    represent the bias for each response (unlike the usual model where the bias 
+    represent the bias between correct and incorrect)
+    """
+    _like = lambda  value, v, V, z, Z, t, T, a, err=err, nT=nT, nZ=nZ, \
+    use_adaptive=use_adaptive, simps_err=simps_err, animl_idx= A_idx: \
+    wiener_like(value[A_idx], v, V, z, Z, t, T, a,\
+                err=err, nT=nT, nZ=nZ, use_adaptive=use_adaptive, simps_err=simps_err) + \
+    wiener_like(value[~A_idx], v, V, 1-z, Z, t, T, a,\
+                err=err, nT=nT, nZ=nZ, use_adaptive=use_adaptive, simps_err=simps_err)
+    _like.__doc__ = wiener_like.__doc__
+    return pm.stochastic_from_dist(name="Wiener Diffusion Process",
+                                       logp=_like,
+                                       dtype=np.float,
+                                       mv=False)
+
  
 WienerFullIntrp = pm.stochastic_from_dist(name="Wiener Diffusion Process",
                                        logp=wiener_like,
