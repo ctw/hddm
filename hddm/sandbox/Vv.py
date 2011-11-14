@@ -29,7 +29,7 @@ class HDDMVv(HDDM):
         if self.Vv_exp:
             Va_lower = -100
             Va_upper = 1
-            Vb_upper = 0.5
+            Vb_upper = 1
             Vb_lower = -100
         else:
             Va_lower = 0
