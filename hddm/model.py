@@ -279,7 +279,7 @@ class HDDMContaminant(HDDM):
             subj_list = self._subjs
         else:
             subj_list = [0]
-            
+
         conds = hm.params_dict['x'].subj_nodes.keys()
 
 
@@ -435,104 +435,6 @@ class HDDMContUnif(HDDMContaminant):
 
         else:
             raise KeyError, "Groupless subj parameter %s not found" % param.name
-
-class HDDMContSigmoid(HDDMContaminant):
-    """Contaminant HDDM Uniform class 
-
-    Outliers are modeled using a sigmoid:
-    the probablity of a response to be an outlier increases in time according to 
-    a sigmoid function.
-    and reaction times.
-
-    :Optional:
-        init : bool
-            Use EZ to initialize parameters (default: True)
-
-    """
-    def __init__(self, *args, **kwargs):
-        
-        super(hddm.model.HDDMContSigmoid, self).__init__(*args, **kwargs)
-        self.params = self.params[:-1] + \
-                 [Parameter('Ss', lower=0.01, upper=100), #sigmoid slope
-                  Parameter('Sh', lower=0.8, upper = 2.5), #sigmoid half point
-                  Parameter('dummy',create_group_node=False),
-                  Parameter('sig', is_bottom_node=True), 
-                  Parameter('x', is_bottom_node=True), 
-                  Parameter('wfpt', is_bottom_node=True)]
-        
-        if kwargs.has_key('replace_params'):
-            self.replace_params(kwargs['replace_param'])
-        
-        self.t_min = 0.75
-        self.t_max = max(self.data['rt'])
-        wp = self.wiener_params
-        self.wfpt = hddm.likelihoods.general_WienerCont(err=wp['err'],
-                                                        nT=wp['nT'],
-                                                        nZ=wp['nZ'],
-                                                        use_adaptive=wp['use_adaptive'],
-                                                        simps_err=wp['simps_err'])
-        
-
-    def get_subj_node(self, param):
-
-        if param.name == 'V':
-            return pm.TruncatedNormal(param.full_name,
-                                      a=param.lower,
-                                      b=1000,
-                                      mu=param.group,
-                                      tau=param.var**-2,
-                                      plot=self.plot_subjs,
-                                      trace = self.trace_subjs,
-                                      value=param.init)
-            
-        if param.name == 'dummy':
-            Ss = self.params_dict['Ss'].subj_nodes[param.tag][param.idx]
-            Sh = self.params_dict['Sh'].subj_nodes[param.tag][param.idx]
-            return pm.Bernoulli('dummy',Ss*(3 - Sh), value=True, observed=True)
-
-        else:
-            return pm.TruncatedNormal(param.full_name,
-                                      a=param.lower,
-                                      b=param.upper,
-                                      mu=param.group, 
-                                      tau=param.var**-2,
-                                      plot=self.plot_subjs,
-                                      trace = self.trace_subjs,
-                                      value=param.init)
-
-
-    def get_bottom_node(self, param, params):
-        if param.name == 'wfpt':
-            return self.wfpt(param.full_name,
-                             value=param.data['rt'].flatten(),
-                             cont_x=params['x'],
-                             v = params['v'],
-                             a = params['a'],
-                             z = self.get_node('z',params),
-                             t = params['t'],
-                             Z = self.get_node('Z',params),
-                             T = self.get_node('T',params),
-                             V = self.get_node('V',params),
-                             t_min=self.t_min,
-                             t_max=self.t_max,
-                             observed=True)
-        
-        if param.name == 'sig':
-            t_rts = abs(param.data['rt']) #take rts absolute value
-            t_rts[t_rts < self.t_min] = -100 #give all rts that are smaller than t_min a very low value
-#            t_rts = -t_rts
-            sig_func = lambda t_rts=t_rts, Ss=params['Ss'], Sh=params['Sh']: pm.invlogit(Ss*(t_rts - Sh))
-            return pm.Lambda(param.full_name, sig_func, plot=False,trace=False)
-
-        if param.name == 'x':
-            # if x is True then it's an outlier
-            rts = param.data['rt']
-            return pm.Bernoulli(param.full_name, p=params['sig'], size=len(param.data['rt']), plot=False)
-
-        else:
-            raise KeyError, "Groupless subj parameter %s not found" % param.name
-
-
 
 
 

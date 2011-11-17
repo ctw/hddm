@@ -152,21 +152,6 @@ class TestSingle(unittest.TestCase):
 
         return hm
 
-    def test_cont_sigmoid(self, assert_=False):
-        n_out = 10
-        params_true = gen_rand_params(include = ())
-        data, temp = hddm.generate.gen_rand_data(samples=300, params=params_true)        
-        data[:n_out]['rt'] = rand(n_out) + max(abs(data['rt'])) + 0.8           
-        hm = hddm.model.HDDMContSigmoid(data, bias=True, is_group_model=False)
-        hm.sample(self.samples, burn=self.burn)
-        check_model(hm.mc, params_true, assert_=False)
-        cont_res = hm.cont_report(plot=False)
-        cont_idx = cont_res['cont_idx']
-#        self.assertTrue(all([x in cont_idx for x in range(n_out)]), "did not find the right outliers")
-#        self.assertTrue(len(cont_idx)<15, "found too many outliers (%d)" % len(cont_idx))
-
-        return hm
-
 
 if __name__=='__main__':
     print "Run nosetest.py"
