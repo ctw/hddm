@@ -117,12 +117,12 @@ class TestSingle(unittest.TestCase):
         print model.params_est
         return model
     
-    def test_cont(self, assert_=False):
+    def test_cont_unif(self, assert_=False):
         params_true = gen_rand_params(include = ())
         data, temp = hddm.generate.gen_rand_data(samples=300, params=params_true)
         data[0]['rt'] = min(abs(data['rt']))/2.
         data[1]['rt'] = max(abs(data['rt'])) + 0.8           
-        hm = hddm.HDDMContaminant(data, bias=True, is_group_model=False)
+        hm = hddm.HDDMContUnif(data, bias=True, is_group_model=False)
         hm.sample(self.samples, burn=self.burn)
         check_model(hm.mc, params_true, assert_=assert_)
         cont_res = hm.cont_report(plot=False)
@@ -131,8 +131,9 @@ class TestSingle(unittest.TestCase):
         self.assertTrue(len(cont_idx)<15, "found too many outliers (%d)" % len(cont_idx))
 
         return hm
+    
 
-    def test_cont_subj(self, assert_=False):
+    def test_cont_unif_subj(self, assert_=False):
         data_samples = 200
         num_subjs = 2
         data, params_true = hddm.generate.gen_rand_subj_data(num_subjs=num_subjs, params=None, 
@@ -140,7 +141,7 @@ class TestSingle(unittest.TestCase):
         for i in range(num_subjs):
             data[data_samples*i]['rt'] = min(abs(data['rt']))/2.
             data[data_samples*i + 1]['rt'] = max(abs(data['rt'])) + 0.8           
-        hm = hddm.model.HDDMContaminant(data, bias=True, is_group_model=True)
+        hm = hddm.model.HDDMContUnif(data, bias=True, is_group_model=True)
         hm.sample(self.samples, burn=self.burn)
         check_model(hm.mc, params_true, assert_=assert_)
         cont_res = hm.cont_report(plot=False)
@@ -148,6 +149,21 @@ class TestSingle(unittest.TestCase):
             cont_idx = cont_res[i]['cont_idx']
             self.assertTrue((0 in cont_idx) and (1 in cont_idx), "did not found the right outliers")
             self.assertTrue(len(cont_idx)<15, "found too many outliers (%d)" % len(cont_idx))
+
+        return hm
+
+    def test_cont_sigmoid(self, assert_=False):
+        n_out = 10
+        params_true = gen_rand_params(include = ())
+        data, temp = hddm.generate.gen_rand_data(samples=300, params=params_true)        
+        data[:n_out]['rt'] = rand(n_out) + max(abs(data['rt'])) + 0.8           
+        hm = hddm.model.HDDMContSigmoid(data, bias=True, is_group_model=False)
+        hm.sample(self.samples, burn=self.burn)
+        check_model(hm.mc, params_true, assert_=False)
+        cont_res = hm.cont_report(plot=False)
+        cont_idx = cont_res['cont_idx']
+#        self.assertTrue(all([x in cont_idx for x in range(n_out)]), "did not find the right outliers")
+#        self.assertTrue(len(cont_idx)<15, "found too many outliers (%d)" % len(cont_idx))
 
         return hm
 

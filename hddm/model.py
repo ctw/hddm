@@ -133,8 +133,6 @@ class HDDM(kabuki.Hierarchical):
         wp = self.wiener_params
         self.wfpt = hddm.likelihoods.general_WienerFullIntrp_variable(err=wp['err'], nT=wp['nT'], nZ=wp['nZ'], use_adaptive=wp['use_adaptive'], simps_err=wp['simps_err'])
 
-        self.params = self.get_params()
-
         super(hddm.model.HDDM, self).__init__(data, include=include, **kwargs)
 
     def get_params(self):
@@ -219,10 +217,7 @@ class HDDM(kabuki.Hierarchical):
             raise KeyError, "Groupless parameter named %s not found." % param.name
 
 class HDDMContaminant(HDDM):
-    """Contaminant HDDM 
-
-    Outliers are modeled using a uniform distribution over responses
-    and reaction times.
+    """Contaminant HDDM Super class
 
     :Optional:
         init : bool
@@ -230,36 +225,8 @@ class HDDMContaminant(HDDM):
 
     """
     def __init__(self, *args, **kwargs):
-        super(HDDMContaminant, self).__init__(*args, **kwargs)
-        self.params = self.params[:-1] + \
-                 [Parameter('pi', lower=0.01, upper=0.1),
-                  Parameter('x', is_bottom_node=True), 
-                  Parameter('wfpt', is_bottom_node=True)]
-
+        super(hddm.model.HDDMContaminant, self).__init__(*args, **kwargs)
         self.cont_res = None
-
-        self.t_min = 0
-        self.t_max = max(self.data['rt'])
-        wp = self.wiener_params
-        self.wfpt = hddm.likelihoods.general_WienerCont(err=wp['err'],
-                                                        nT=wp['nT'],
-                                                        nZ=wp['nZ'],
-                                                        use_adaptive=wp['use_adaptive'],
-                                                        simps_err=wp['simps_err'])
-
-        if kwargs.has_key('init'):
-            init = kwargs['init']
-        else:
-            init = True
-
-        if init:
-            # Estimate EZ parameters
-            ez_params = hddm.utils.EZ_subjs(self.data['rt'])
-
-            # Set as init values
-            for param in self.params:
-                if ez_params.has_key(param.name):
-                    param.init = ez_params[param.name]
 
 
     def get_bottom_node(self, param, params):
@@ -306,13 +273,15 @@ class HDDMContaminant(HDDM):
         """
         hm = self
         data_dep = hm._get_data_depend()
-        conds = [str(x[2]) for x in data_dep]
         
         self.cont_res = {}
         if self.is_group_model:
             subj_list = self._subjs
         else:
             subj_list = [0]
+            
+        conds = hm.params_dict['x'].subj_nodes.keys()
+
 
         #loop over subjects
         for subj_idx, subj in enumerate(subj_list):
@@ -325,7 +294,7 @@ class HDDMContaminant(HDDM):
             for cond in conds:
                 print "*********************"
                 print "looking at %s" % cond
-                nodes =hm.params_include['x'].subj_nodes[cond]
+                nodes =hm.params_dict['x'].subj_nodes[cond]
                 if self.is_group_model:
                     node = nodes[subj_idx]
                 else:
@@ -338,7 +307,7 @@ class HDDMContaminant(HDDM):
                 if idx.size > 0:
                     print "found %d probable outliers in %s" % (len(idx), cond)
                     wfpt = list(node.children)[0]
-                    data_idx = [x for x in data_dep if str(x[2])==cond][0][0]['data_idx']
+                    data_idx = [x for x in data_dep if x[3]==cond][0][0]['data_idx']
                     for i_cont in range(len(idx)):
                         print "rt: %8.5f prob: %.2f" % (wfpt.value[idx[i_cont]], m[idx[i_cont]])
                     cont_idx = np.r_[cont_idx, data_idx[idx]]
@@ -412,7 +381,161 @@ class HDDMContaminant(HDDM):
         data_all['rt'] = np.abs(data_all['rt'])
         
         return data_all
+
+
+class HDDMContUnif(HDDMContaminant):
+    """Contaminant HDDM Uniform class 
+
+    Outliers are modeled using a uniform distribution over responses
+    and reaction times.
+
+    :Optional:
+        init : bool
+            Use EZ to initialize parameters (default: True)
+
+    """
+    def __init__(self, *args, **kwargs):
+        super(hddm.model.HDDMContUnif, self).__init__(*args, **kwargs)
+        self.params = self.params[:-1] + \
+                 [Parameter('pi', lower=0.01, upper=0.1),
+                  Parameter('x', is_bottom_node=True), 
+                  Parameter('wfpt', is_bottom_node=True)]
+
+        self.t_min = 0
+        self.t_max = max(self.data['rt'])
+        wp = self.wiener_params
+        self.wfpt = hddm.likelihoods.general_WienerCont(err=wp['err'],
+                                                        nT=wp['nT'],
+                                                        nZ=wp['nZ'],
+                                                        use_adaptive=wp['use_adaptive'],
+                                                        simps_err=wp['simps_err'])
+
+    def get_bottom_node(self, param, params):
+        if param.name == 'wfpt':
+            return self.wfpt(param.full_name,
+                             value=param.data['rt'].flatten(),
+                             cont_x=params['x'],
+                             v = params['v'],
+                             a = params['a'],
+                             z = self.get_node('z',params),
+                             t = params['t'],
+                             Z = self.get_node('Z',params),
+                             T = self.get_node('T',params),
+                             V = self.get_node('V',params),
+                             t_min=self.t_min,
+                             t_max=self.t_max,
+                             observed=True)
+
+        elif param.name == 'x':
+            rts = param.data['rt']
+            outlier = np.empty(rts.shape, dtype=np.bool)
+            outlier[np.abs(rts) < params['t'].value] = True
+            outlier[np.abs(rts) >= params['t'].value] = False
+            return pm.Bernoulli(param.full_name, p=params['pi'], size=len(param.data['rt']), plot=False, value=outlier)
+
+        else:
+            raise KeyError, "Groupless subj parameter %s not found" % param.name
+
+class HDDMContSigmoid(HDDMContaminant):
+    """Contaminant HDDM Uniform class 
+
+    Outliers are modeled using a sigmoid:
+    the probablity of a response to be an outlier increases in time according to 
+    a sigmoid function.
+    and reaction times.
+
+    :Optional:
+        init : bool
+            Use EZ to initialize parameters (default: True)
+
+    """
+    def __init__(self, data, nodes_params = None, **kwargs):
         
+        super(hddm.model.HDDMContSigmoid, self).__init__(*args, **kwargs)
+        self.params = self.params[:-1] + \
+                 [Parameter('Ss', lower=0.01, upper=100), #sigmoid slope
+                  Parameter('Sh', lower=0.8, upper = 2.5), #sigmoid half point
+                  Parameter('dummy',create_group_node=False),
+                  Parameter('sig', is_bottom_node=True), 
+                  Parameter('x', is_bottom_node=True), 
+                  Parameter('wfpt', is_bottom_node=True)]
+        
+        if kwargs.haskey('replace_params'):
+            self.replace_params(kwargs['replace_param'])
+        
+        self.t_min = 0.75
+        self.t_max = max(self.data['rt'])
+        wp = self.wiener_params
+        self.wfpt = hddm.likelihoods.general_WienerCont(err=wp['err'],
+                                                        nT=wp['nT'],
+                                                        nZ=wp['nZ'],
+                                                        use_adaptive=wp['use_adaptive'],
+                                                        simps_err=wp['simps_err'])
+        
+
+    def get_subj_node(self, param):
+
+        if param.name == 'V':
+            return pm.TruncatedNormal(param.full_name,
+                                      a=param.lower,
+                                      b=1000,
+                                      mu=param.group,
+                                      tau=param.var**-2,
+                                      plot=self.plot_subjs,
+                                      trace = self.trace_subjs,
+                                      value=param.init)
+            
+        if param.name == 'dummy':
+            Ss = self.params_dict['Ss'].subj_nodes[param.tag][param.idx]
+            Sh = self.params_dict['Sh'].subj_nodes[param.tag][param.idx]
+            return pm.Bernoulli('dummy',3*Ss - Sh, value=True, observed=True)
+
+        else:
+            return pm.TruncatedNormal(param.full_name,
+                                      a=param.lower,
+                                      b=param.upper,
+                                      mu=param.group, 
+                                      tau=param.var**-2,
+                                      plot=self.plot_subjs,
+                                      trace = self.trace_subjs,
+                                      value=param.init)
+
+
+    def get_bottom_node(self, param, params):
+        if param.name == 'wfpt':
+            return self.wfpt(param.full_name,
+                             value=param.data['rt'].flatten(),
+                             cont_x=params['x'],
+                             v = params['v'],
+                             a = params['a'],
+                             z = self.get_node('z',params),
+                             t = params['t'],
+                             Z = self.get_node('Z',params),
+                             T = self.get_node('T',params),
+                             V = self.get_node('V',params),
+                             t_min=self.t_min,
+                             t_max=self.t_max,
+                             observed=True)
+        
+        if param.name == 'sig':
+            t_rts = abs(param.data['rt']) #take rts absolute value
+            t_rts[t_rts < self.t_min] = -100 #give all rts that are smaller than t_min a very low value
+            t_rts = -t_rts
+            sig_func = lambda t_rts=t_rts, Ss=params['Ss'], Sh=params['Sh']: pm.invlogit(t_rts*Ss - Sh)
+            return pm.Lambda(param.full_name, sig_func, plot=False,trace=False)
+
+        if param.name == 'x':
+            # if x is True then it's an outlier
+            rts = param.data['rt']
+            return pm.Bernoulli(param.full_name, p=params['sig'], size=len(param.data['rt']), plot=False)
+
+        else:
+            raise KeyError, "Groupless subj parameter %s not found" % param.name
+
+
+
+
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
