@@ -449,7 +449,7 @@ class HDDMContSigmoid(HDDMContaminant):
             Use EZ to initialize parameters (default: True)
 
     """
-    def __init__(self, data, nodes_params = None, **kwargs):
+    def __init__(self, *args, **kwargs):
         
         super(hddm.model.HDDMContSigmoid, self).__init__(*args, **kwargs)
         self.params = self.params[:-1] + \
@@ -460,7 +460,7 @@ class HDDMContSigmoid(HDDMContaminant):
                   Parameter('x', is_bottom_node=True), 
                   Parameter('wfpt', is_bottom_node=True)]
         
-        if kwargs.haskey('replace_params'):
+        if kwargs.has_key('replace_params'):
             self.replace_params(kwargs['replace_param'])
         
         self.t_min = 0.75
@@ -488,7 +488,7 @@ class HDDMContSigmoid(HDDMContaminant):
         if param.name == 'dummy':
             Ss = self.params_dict['Ss'].subj_nodes[param.tag][param.idx]
             Sh = self.params_dict['Sh'].subj_nodes[param.tag][param.idx]
-            return pm.Bernoulli('dummy',3*Ss - Sh, value=True, observed=True)
+            return pm.Bernoulli('dummy',Ss*(3 - Sh), value=True, observed=True)
 
         else:
             return pm.TruncatedNormal(param.full_name,
@@ -520,8 +520,8 @@ class HDDMContSigmoid(HDDMContaminant):
         if param.name == 'sig':
             t_rts = abs(param.data['rt']) #take rts absolute value
             t_rts[t_rts < self.t_min] = -100 #give all rts that are smaller than t_min a very low value
-            t_rts = -t_rts
-            sig_func = lambda t_rts=t_rts, Ss=params['Ss'], Sh=params['Sh']: pm.invlogit(t_rts*Ss - Sh)
+#            t_rts = -t_rts
+            sig_func = lambda t_rts=t_rts, Ss=params['Ss'], Sh=params['Sh']: pm.invlogit(Ss*(t_rts - Sh))
             return pm.Lambda(param.full_name, sig_func, plot=False,trace=False)
 
         if param.name == 'x':
