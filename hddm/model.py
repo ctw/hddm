@@ -211,7 +211,7 @@ class HDDM(kabuki.Hierarchical):
         else:
             raise KeyError, "Groupless parameter named %s not found." % param.name
 
-    def subj_by_subj_map_init(self, runs = 2, **map_kwargs):
+    def subj_by_subj_map_init(self, runs=2, **map_kwargs):
         """
         initialzing nodes by finding the MAP for each subject separately
 
@@ -242,7 +242,7 @@ class HDDM(kabuki.Hierarchical):
             t_data = rec_drop_fields(t_data, ['data_idx'])
             s_model = HDDM(data = t_data, include=self.include,
                            **t_kwargs)
-            s_model.map(method='fmin_powell', runs = runs, **map_kwargs)
+            s_model.map(method='fmin_powell', runs=runs, **map_kwargs)
 
             # copy to original model
             for (name, node) in s_model.group_nodes.iteritems():
