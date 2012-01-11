@@ -22,6 +22,7 @@ from kabuki.hierarchical import Parameter
 from copy import copy, deepcopy
 from time import time
 from matplotlib.mlab import rec_drop_fields
+pm.conjugate_Gibbs_competence = 3
 
 try:
     from IPython.Debugger import Tracer;
@@ -112,7 +113,8 @@ class HDDM(kabuki.Hierarchical):
     """
 
     def __init__(self, data, bias=False,
-                 include=(), wiener_params=None, **kwargs):
+                 include=(), wiener_params=None,
+                 share_var = (), **kwargs):
 
         # Flip sign for lower boundary RTs
         data = hddm.utils.flip_errors(data)
@@ -137,6 +139,7 @@ class HDDM(kabuki.Hierarchical):
         wp = self.wiener_params
         self.wfpt = hddm.likelihoods.general_WienerFullIntrp_variable(err=wp['err'], nT=wp['nT'], nZ=wp['nZ'], use_adaptive=wp['use_adaptive'], simps_err=wp['simps_err'])
         self.kwargs = kwargs
+        self.share_var = share_var
 
         super(hddm.model.HDDM, self).__init__(data, include=include, **kwargs)
 
@@ -173,7 +176,7 @@ class HDDM(kabuki.Hierarchical):
         if param.name.startswith('e') or param.name.startswith('v'):
             return pm.Normal(param.full_name,
                              mu=param.group,
-                             tau=param.var**-2,
+                             tau=param.var,
                              plot=self.plot_subjs,
                              trace=self.trace_subjs,
                              value=param.init)
@@ -183,10 +186,56 @@ class HDDM(kabuki.Hierarchical):
                                       a=param.lower,
                                       b=param.upper,
                                       mu=param.group,
-                                      tau=param.var**-2,
+                                      tau=param.var,
                                       plot=self.plot_subjs,
                                       trace = self.trace_subjs,
                                       value=param.init)
+
+    def get_var_node(self, param):
+        """
+        Create and return a Uniform prior distribution for the
+        variability parameter 'param'.
+
+        Note, that we chose a Uniform distribution rather than the
+        more common Gamma (see Gelman 2006: "Prior distributions for
+        variance parameters in hierarchical models").
+
+        This is used for the variability for the group distribution.
+
+        """
+
+        #check if the parameter share its variance
+        #and no other parameter was initialized
+        if (param.name in self.share_var) and \
+        len(self.params_dict[param.name].var_nodes.keys()) > 0:
+                return self.params_dict[param.name].var_nodes.values()[0]
+
+#        return  param.name == 'v':
+        return pm.Gamma(param.full_name, alpha=0.01, beta=0.01, value = 0.3)
+#
+#        return pm.Uniform(param.full_name, lower=param.var_lower, upper=param.var_upper,
+#                          value=.3, plot=self.plot_var)
+
+    def get_group_node(self, param):
+        """Create and return a uniform prior distribution for group
+        parameter 'param'.
+
+        This is used for the group distributions.
+
+        """
+        if param.name == 'v':
+            return pm.Normal(param.full_name,
+                              mu=0,
+                              tau=1./100,
+                              value=param.init,
+                              verbose=param.verbose)
+        else:
+            return pm.Uniform(param.full_name,
+                              lower=param.lower,
+                              upper=param.upper,
+                              value=param.init,
+                              verbose=param.verbose)
+
 
     def get_bottom_node(self, param, params):
         """Create and return the wiener likelihood distribution
