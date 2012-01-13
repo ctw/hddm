@@ -164,7 +164,12 @@ class HDDM(kabuki.Hierarchical):
             idx = [x for x in range(len(params)) if params[x].name == 'z'][0]
             params[idx] = kabuki.Parameter('z', lower = 0.1, upper=0.9,
                                          var_lower=1e-3, var_upper=1e5,
-                                         init=0.5, optional=True, default=0.5)
+                                         init=0.5, optional=True, default=0.5,
+                                         var_type='sample_size')
+
+        if self.gamma_v:
+            idx = [x for x in range(len(params)) if params[x].name == 'v'][0]
+            params[idx].var_type = 'precision'
 
         return params
 
