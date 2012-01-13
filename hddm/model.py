@@ -19,7 +19,6 @@ import hddm
 import kabuki
 
 from kabuki.hierarchical import Parameter
-pm.conjugate_Gibbs_competence = 3
 
 try:
     from IPython.Debugger import Tracer;
@@ -111,7 +110,7 @@ class HDDM(kabuki.Hierarchical):
 
     def __init__(self, data, bias=False,
                  include=(), wiener_params=None,
-                 share_var = (), **kwargs):
+                 share_var = (), gibbs = False, **kwargs):
 
         # Flip sign for lower boundary RTs
         data = hddm.utils.flip_errors(data)
@@ -136,6 +135,7 @@ class HDDM(kabuki.Hierarchical):
         wp = self.wiener_params
         self.wfpt = hddm.likelihoods.general_WienerFullIntrp_variable(err=wp['err'], nT=wp['nT'], nZ=wp['nZ'], use_adaptive=wp['use_adaptive'], simps_err=wp['simps_err'])
         self.share_var = share_var
+        self.gibbs = gibbs
 
         super(hddm.model.HDDM, self).__init__(data, include=include, **kwargs)
 
@@ -182,7 +182,7 @@ class HDDM(kabuki.Hierarchical):
                                       a=param.lower,
                                       b=param.upper,
                                       mu=param.group,
-                                      tau=param.var,
+                                      tau=param.var**-2,
                                       plot=self.plot_subjs,
                                       trace = self.trace_subjs,
                                       value=param.init)
@@ -206,11 +206,11 @@ class HDDM(kabuki.Hierarchical):
         len(self.params_dict[param.name].var_nodes.keys()) > 0:
                 return self.params_dict[param.name].var_nodes.values()[0]
 
-#        return  param.name == 'v':
-        return pm.Gamma(param.full_name, alpha=0.01, beta=0.01, value = 0.3)
-#
-#        return pm.Uniform(param.full_name, lower=param.var_lower, upper=param.var_upper,
-#                          value=.3, plot=self.plot_var)
+        if  param.name == 'v':
+            return pm.Gamma(param.full_name, alpha=0.01, beta=0.01, value = 0.3)
+
+        return pm.Uniform(param.full_name, lower=param.var_lower, upper=param.var_upper,
+                          value=.3, plot=self.plot_var)
 
     def get_group_node(self, param):
         """Create and return a uniform prior distribution for group
@@ -222,7 +222,7 @@ class HDDM(kabuki.Hierarchical):
         if param.name == 'v':
             return pm.Normal(param.full_name,
                               mu=0,
-                              tau=1./100,
+                              tau=1./15,
                               value=param.init,
                               verbose=param.verbose)
         else:
@@ -255,6 +255,18 @@ class HDDM(kabuki.Hierarchical):
 
         else:
             raise KeyError, "Groupless parameter named %s not found." % param.name
+
+    def mcmc(self, *arg, **kwargs):
+        super(hddm.model.HDDM, self).mcmc(*arg, **kwargs)
+
+        if self.gibbs:
+            from pymc.sandbox import GibbsStepMethods
+            for node in self.params_dict['v'].group_nodes.values():
+                self.mc.use_step_method(hddm.utils.NormalNormal, node)
+
+            for node in self.params_dict['v'].var_nodes.values():
+                self.mc.use_step_method(GibbsStepMethods.GammaNormal, node)
+
 
 
 class HDDMContaminant(HDDM):
