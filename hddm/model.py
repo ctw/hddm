@@ -110,7 +110,8 @@ class HDDM(kabuki.Hierarchical):
 
     def __init__(self, data, bias=False,
                  include=(), wiener_params=None,
-                 share_var = (), gibbs = False, **kwargs):
+                 share_var = (), gibbs = False,
+                 beta = (),  **kwargs):
 
         # Flip sign for lower boundary RTs
         data = hddm.utils.flip_errors(data)
@@ -136,6 +137,7 @@ class HDDM(kabuki.Hierarchical):
         self.wfpt = hddm.likelihoods.general_WienerFullIntrp_variable(err=wp['err'], nT=wp['nT'], nZ=wp['nZ'], use_adaptive=wp['use_adaptive'], simps_err=wp['simps_err'])
         self.share_var = share_var
         self.gibbs = gibbs
+        self.beta = beta
 
         super(hddm.model.HDDM, self).__init__(data, include=include, **kwargs)
 
@@ -158,6 +160,13 @@ class HDDM(kabuki.Hierarchical):
                             default=0, optional=True),
                   Parameter('wfpt', is_bottom_node=True)]
 
+        if 'z' in self.beta:
+            for i in range(len(params)):
+                if params[i].name == 'z':
+                    params[i] = kabuki.Parameter('z', lower = 0.1, upper=0.9,
+                                                 var_lower=1e-3, var_upper=1e5,
+                                                 init=0.5, optional=True, default=0.5)
+
         return params
 
     def get_subj_node(self, param):
@@ -176,6 +185,13 @@ class HDDM(kabuki.Hierarchical):
                              plot=self.plot_subjs,
                              trace=self.trace_subjs,
                              value=param.init)
+
+
+        elif (param.name == 'z') and ('z' in self.beta):
+            mu = param.group
+            n = param.var #it's not really the varaince but the sample size
+            return pm.Beta(param.full_name,alpha=mu*n, beta=(1-mu)*n,
+                           plot=self.plot_subjs, trace=self.trace_subjs)
 
         else:
             return pm.TruncatedNormal(param.full_name,
@@ -207,10 +223,16 @@ class HDDM(kabuki.Hierarchical):
                 return self.params_dict[param.name].var_nodes.values()[0]
 
         if  param.name == 'v':
-            return pm.Gamma(param.full_name, alpha=0.01, beta=0.01, value = 0.3)
+            return pm.Gamma(param.full_name, alpha=0.01, beta=0.01, value = 0.3,
+                            plot=self.plot_var)
 
-        return pm.Uniform(param.full_name, lower=param.var_lower, upper=param.var_upper,
-                          value=.3, plot=self.plot_var)
+        elif (param.name == 'z') and ('z' in self.beta):
+            #this is not the variance node but sample size node
+            return pm.Uniform(param.full_name, lower=param.var_lower, upper=param.var_upper,
+                              value=30, plot=self.plot_var)
+        else:
+            return pm.Uniform(param.full_name, lower=param.var_lower, upper=param.var_upper,
+                              value=.3, plot=self.plot_var)
 
     def get_group_node(self, param):
         """Create and return a uniform prior distribution for group
@@ -225,6 +247,7 @@ class HDDM(kabuki.Hierarchical):
                               tau=1./15,
                               value=param.init,
                               verbose=param.verbose)
+
         else:
             return pm.Uniform(param.full_name,
                               lower=param.lower,
