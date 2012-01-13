@@ -110,8 +110,7 @@ class HDDM(kabuki.Hierarchical):
 
     def __init__(self, data, bias=False,
                  include=(), wiener_params=None,
-                 share_var = (), gibbs = False,
-                 beta = (),  **kwargs):
+                 share_var = (), beta_z = False,  gamma_v = False, **kwargs):
 
         # Flip sign for lower boundary RTs
         data = hddm.utils.flip_errors(data)
@@ -136,8 +135,8 @@ class HDDM(kabuki.Hierarchical):
         wp = self.wiener_params
         self.wfpt = hddm.likelihoods.general_WienerFullIntrp_variable(err=wp['err'], nT=wp['nT'], nZ=wp['nZ'], use_adaptive=wp['use_adaptive'], simps_err=wp['simps_err'])
         self.share_var = share_var
-        self.gibbs = gibbs
-        self.beta = beta
+        self.beta_z = beta_z
+        self.gamma_v = gamma_v
 
         super(hddm.model.HDDM, self).__init__(data, include=include, **kwargs)
 
@@ -160,12 +159,12 @@ class HDDM(kabuki.Hierarchical):
                             default=0, optional=True),
                   Parameter('wfpt', is_bottom_node=True)]
 
-        if 'z' in self.beta:
-            for i in range(len(params)):
-                if params[i].name == 'z':
-                    params[i] = kabuki.Parameter('z', lower = 0.1, upper=0.9,
-                                                 var_lower=1e-3, var_upper=1e5,
-                                                 init=0.5, optional=True, default=0.5)
+        #replace parameter is beta_z is True
+        if self.beta_z:
+            idx = [x for x in range(len(params)) if params[x].name == 'z'][0]
+            params[idx] = kabuki.Parameter('z', lower = 0.1, upper=0.9,
+                                         var_lower=1e-3, var_upper=1e5,
+                                         init=0.5, optional=True, default=0.5)
 
         return params
 
@@ -178,27 +177,33 @@ class HDDM(kabuki.Hierarchical):
         This is used for the individual subject distributions.
 
         """
+        #create z node if z is beta
+        if (param.name == 'z') and (self.beta_z):
+            mu = param.group
+            n = param.var #it's not really the variance but the sample size
+            return pm.Beta(param.full_name,alpha=mu*n, beta=(1-mu)*n,
+                           plot=self.plot_subjs, trace=self.trace_subjs)
+
+        #create v node
+        if isinstance(param.var, pm.Gamma):
+            tau = param.var
+        else:
+            tau = param.var**-2
+
         if param.name.startswith('e') or param.name.startswith('v'):
             return pm.Normal(param.full_name,
                              mu=param.group,
-                             tau=param.var,
+                             tau=tau,
                              plot=self.plot_subjs,
                              trace=self.trace_subjs,
                              value=param.init)
-
-
-        elif (param.name == 'z') and ('z' in self.beta):
-            mu = param.group
-            n = param.var #it's not really the varaince but the sample size
-            return pm.Beta(param.full_name,alpha=mu*n, beta=(1-mu)*n,
-                           plot=self.plot_subjs, trace=self.trace_subjs)
 
         else:
             return pm.TruncatedNormal(param.full_name,
                                       a=param.lower,
                                       b=param.upper,
                                       mu=param.group,
-                                      tau=param.var**-2,
+                                      tau=tau,
                                       plot=self.plot_subjs,
                                       trace = self.trace_subjs,
                                       value=param.init)
@@ -222,14 +227,18 @@ class HDDM(kabuki.Hierarchical):
         len(self.params_dict[param.name].var_nodes.keys()) > 0:
                 return self.params_dict[param.name].var_nodes.values()[0]
 
-        if  param.name == 'v':
+        #create zvar if z is beta
+        if (param.name == 'z') and (self.beta_z):
+                #this is not the variance node but sample size node
+                return pm.Uniform(param.full_name, lower=param.var_lower, upper=param.var_upper,
+                                  value=30, plot=self.plot_var)
+
+        #create gamma distribution
+        if (param.name == 'v' and self.gamma_v == True):
             return pm.Gamma(param.full_name, alpha=0.01, beta=0.01, value = 0.3,
                             plot=self.plot_var)
 
-        elif (param.name == 'z') and ('z' in self.beta):
-            #this is not the variance node but sample size node
-            return pm.Uniform(param.full_name, lower=param.var_lower, upper=param.var_upper,
-                              value=30, plot=self.plot_var)
+        #create uniform distrbution
         else:
             return pm.Uniform(param.full_name, lower=param.var_lower, upper=param.var_upper,
                               value=.3, plot=self.plot_var)
@@ -282,11 +291,11 @@ class HDDM(kabuki.Hierarchical):
     def mcmc(self, *arg, **kwargs):
         super(hddm.model.HDDM, self).mcmc(*arg, **kwargs)
 
-        if self.gibbs:
-            from pymc.sandbox import GibbsStepMethods
-            for node in self.params_dict['v'].group_nodes.values():
-                self.mc.use_step_method(hddm.utils.NormalNormal, node)
+        from pymc.sandbox import GibbsStepMethods
+        for node in self.params_dict['v'].group_nodes.values():
+            self.mc.use_step_method(hddm.step_methods.NormalPriorNormal, node)
 
+        if self.gamma_v:
             for node in self.params_dict['v'].var_nodes.values():
                 self.mc.use_step_method(GibbsStepMethods.GammaNormal, node)
 

@@ -5,6 +5,7 @@ __docformat__ = 'restructuredtext'
 import likelihoods
 import generate
 import utils
+import step_methods
 import sandbox
 
 from model import *

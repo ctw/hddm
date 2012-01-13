@@ -1234,35 +1234,6 @@ def qp_plot(hm, quantiles = (10, 30, 50, 70, 90), plot_subj=True,
                           marker = 'o', handle = s_handles[i_s][i_subj])
 
 
-class NormalNormal(pm.Gibbs):
-    """
-    Step method for Normal Prior with Normal likelihood.
-    """
-    linear_OK = True
-    child_class = pm.Normal
-    parent_label = 'mu'
-    target_class = pm.Normal
-
-    def __init__(self, stochastic, *args, **kwargs):
-        self.stochastic = stochastic
-        self.mu_0 = stochastic.parents['mu']
-        self.tau_0 = stochastic.parents['tau']
-        self.tau_node = list(stochastic.children)[0].parents['tau']
-        self.children = stochastic.children
-        self.n_subj = len(self.children)
-        
-        pm.Gibbs.__init__(self, stochastic, *args, **kwargs)
-
-    
-    def step(self):
-        
-        tau_prime = self.tau_0 + self.n_subj*self.tau_node.value
-        sum_v = np.sum([x.value for x in self.children])
-        mu_prime = ((self.tau_0 * self.mu_0) + (self.tau_node.value*sum_v))/tau_prime
-    
-        self.stochastic.value = np.random.randn()/tau_prime + mu_prime
-    
-    
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
